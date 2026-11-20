@@ -38,6 +38,11 @@ ScaffoldingReadMe.txt
 
 # dotenv environment variables file
 .env
+!.env.example
+
+# Publish output and local service data
+publish/
+data/
 
 # Others
 ~$*
@@ -55,3 +60,6 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+.vscode/launch.json
+.vscode/tasks.json
+deploy/solana-wallet.service

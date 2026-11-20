@@ -1,0 +1,95 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-solana-wallet
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish
+        run: dotnet publish SolanaWalletService.csproj -c Release -o publish
+
+      - name: Pack
+        run: tar -czf solana-wallet.tar.gz -C publish .
+
+      - name: Upload and restart
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_PORT: ${{ secrets.EC2_PORT }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/solana-wallet
+          chmod 600 ~/.ssh/solana-wallet
+          ssh-keyscan -p "$EC2_PORT" -H "$EC2_HOST" >> ~/.ssh/known_hosts
+          scp -P "$EC2_PORT" -i ~/.ssh/solana-wallet -o IdentitiesOnly=yes \
+            solana-wallet.tar.gz \
+            "$EC2_USER@$EC2_HOST:/tmp/solana-wallet.tar.gz"
+          ssh -p "$EC2_PORT" -i ~/.ssh/solana-wallet -o IdentitiesOnly=yes \
+            "$EC2_USER@$EC2_HOST" 'bash -s' << 'EOF'
+          set -euo pipefail
+          if ! id solana-wallet >/dev/null 2>&1; then
+            sudo useradd --system --home-dir /opt/solana-wallet --no-create-home --shell /usr/sbin/nologin solana-wallet
+          fi
+          sudo install -d -o solana-wallet -g solana-wallet /opt/solana-wallet
+          sudo install -d -o solana-wallet -g solana-wallet /opt/solana-wallet/data
+          rm -rf /tmp/solana-wallet-publish
+          mkdir -p /tmp/solana-wallet-publish
+          tar -xzf /tmp/solana-wallet.tar.gz -C /tmp/solana-wallet-publish
+          sudo rsync -a --delete --exclude data /tmp/solana-wallet-publish/ /opt/solana-wallet/
+          sudo chown -R solana-wallet:solana-wallet /opt/solana-wallet
+          sudo tee /etc/systemd/system/solana-wallet.service >/dev/null << 'UNIT'
+          [Unit]
+          Description=Solana wallet API
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=solana-wallet
+          Group=solana-wallet
+          WorkingDirectory=/opt/solana-wallet
+          Environment=HOME=/opt/solana-wallet
+          ExecStart=/usr/bin/dotnet /opt/solana-wallet/SolanaWalletService.dll
+          EnvironmentFile=/etc/solana-wallet.env
+          Restart=on-failure
+          RestartSec=5
+          KillSignal=SIGINT
+          TimeoutStopSec=20
+          SyslogIdentifier=solana-wallet
+          NoNewPrivileges=true
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          test -f /etc/solana-wallet.env
+          sudo systemctl daemon-reload
+          sudo systemctl enable solana-wallet
+          sudo systemctl restart solana-wallet
+          rm -rf /tmp/solana-wallet-publish /tmp/solana-wallet.tar.gz
+          for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+            if curl -fsS http://127.0.0.1:5101/health; then
+              echo
+              exit 0
+            fi
+            sleep 1
+          done
+          sudo systemctl status solana-wallet --no-pager || true
+          sudo journalctl -u solana-wallet -n 80 --no-pager || true
+          exit 1
+          EOF
