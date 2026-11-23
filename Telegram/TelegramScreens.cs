@@ -12,14 +12,14 @@ internal static class TelegramScreens
 {
     private const int MaxLength = 3900;
 
-    public static (string Text, InlineKeyboardMarkup Keyboard) Menu(AppOptions options, WalletBalanceDto balance)
+    public static (string Text, InlineKeyboardMarkup Keyboard) Menu(AppOptions options, WalletBalanceDto balance, string? usdt)
     {
         var text = new StringBuilder()
             .AppendLine("◎ <b>SOL Wallet</b>")
             .AppendLine()
             .Append("Network: ").AppendLine(Esc(options.NetworkLabel))
-            .Append("Address: <code>").Append(Esc(balance.Address)).AppendLine("</code>")
-            .Append("Balance: <b>").Append(Esc(balance.Balance)).AppendLine(" SOL</b>");
+            .Append("Address: <code>").Append(Esc(balance.Address)).AppendLine("</code>");
+        AppendBalance(text, "Balance: ", balance.Balance, usdt);
 
         if (!string.Equals(balance.Status, "active", StringComparison.Ordinal))
             text.Append("Status: ").AppendLine(Esc(StatusLabel(balance.Status)));
@@ -65,13 +65,13 @@ internal static class TelegramScreens
         return (text, BackOnly());
     }
 
-    public static (string Text, InlineKeyboardMarkup Keyboard) Balance(WalletBalanceDto balance)
+    public static (string Text, InlineKeyboardMarkup Keyboard) Balance(WalletBalanceDto balance, string? usdt)
     {
         var text = new StringBuilder()
             .AppendLine("💰 <b>Balance</b>")
-            .AppendLine()
-            .Append("<b>").Append(Esc(balance.Balance)).AppendLine(" SOL</b>")
-            .Append("Status: ").AppendLine(Esc(StatusLabel(balance.Status)))
+            .AppendLine();
+        AppendBalance(text, "", balance.Balance, usdt);
+        text.Append("Status: ").AppendLine(Esc(StatusLabel(balance.Status)))
             .Append("Updated: ").AppendLine(Esc(FormatUtc(balance.RetrievedAtUtc)));
 
         if (balance.Status == "nonexist")
@@ -140,6 +140,7 @@ internal static class TelegramScreens
     public static (string Text, InlineKeyboardMarkup Keyboard) WithdrawAmount(
         string address,
         string? balance,
+        string? usdt,
         string maxPayout,
         string? problem)
     {
@@ -149,7 +150,7 @@ internal static class TelegramScreens
         AppendProblem(text, problem);
         text.Append("To: <code>").Append(Esc(address)).AppendLine("</code>");
         if (balance is not null)
-            text.Append("Balance: <b>").Append(Esc(balance)).AppendLine(" SOL</b>");
+            AppendBalance(text, "Balance: ", balance, usdt);
         text.Append("Max: ").Append(Esc(maxPayout)).AppendLine(" SOL")
             .AppendLine()
             .Append("How much SOL?");
@@ -538,6 +539,13 @@ internal static class TelegramScreens
             [InlineKeyboardButton.WithCallbackData("✅ Approve", "sw:wa")],
             [InlineKeyboardButton.WithCallbackData("❌ Cancel", "sw:wx")]
         ]);
+    }
+
+    private static void AppendBalance(StringBuilder text, string prefix, string sol, string? usdt)
+    {
+        text.Append(prefix).Append("<b>").Append(Esc(sol)).AppendLine(" SOL</b>");
+        if (!string.IsNullOrWhiteSpace(usdt))
+            text.Append("≈ <b>").Append(Esc(usdt)).AppendLine(" USDT</b>");
     }
 
     private static void AppendProblem(StringBuilder text, string? problem)

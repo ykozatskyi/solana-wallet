@@ -15,6 +15,7 @@ internal sealed class TelegramUpdateHandler
     private const int MaxOffset = 1_000_000;
 
     private readonly Services.SolanaWalletService _wallet;
+    private readonly Services.SolUsdtQuote _quotes;
     private readonly PayoutService _payouts;
     private readonly AppOptions _options;
     private readonly ILogger<TelegramUpdateHandler> _logger;
@@ -23,11 +24,13 @@ internal sealed class TelegramUpdateHandler
 
     public TelegramUpdateHandler(
         Services.SolanaWalletService wallet,
+        Services.SolUsdtQuote quotes,
         PayoutService payouts,
         AppOptions options,
         ILogger<TelegramUpdateHandler> logger)
     {
         _wallet = wallet;
+        _quotes = quotes;
         _payouts = payouts;
         _options = options;
         _logger = logger;
@@ -194,7 +197,7 @@ internal sealed class TelegramUpdateHandler
             try
             {
                 var balance = await _wallet.GetBalanceAsync(ct).ConfigureAwait(false);
-                return TelegramScreens.Menu(_options, balance);
+                return TelegramScreens.Menu(_options, balance, await QuoteAsync(balance.Balance, ct).ConfigureAwait(false));
             }
             catch (SolanaRpcException ex)
             {
@@ -218,7 +221,7 @@ internal sealed class TelegramUpdateHandler
         return ShowAsync(bot, chatId, messageId, async ct =>
         {
             var balance = await _wallet.GetBalanceAsync(ct).ConfigureAwait(false);
-            return TelegramScreens.Balance(balance);
+            return TelegramScreens.Balance(balance, await QuoteAsync(balance.Balance, ct).ConfigureAwait(false));
         }, cancellationToken);
     }
 
@@ -484,7 +487,8 @@ internal sealed class TelegramUpdateHandler
                 case WithdrawStep.Address:
                     return TelegramScreens.WithdrawAddress(_options.NetworkLabel, problem);
                 case WithdrawStep.Amount:
-                    return TelegramScreens.WithdrawAmount(address, await TryBalanceTextAsync(ct).ConfigureAwait(false), MaxPayoutText(), problem);
+                    var (balance, usdt) = await TryBalanceQuoteAsync(ct).ConfigureAwait(false);
+                    return TelegramScreens.WithdrawAmount(address, balance, usdt, MaxPayoutText(), problem);
                 case WithdrawStep.Memo:
                     return TelegramScreens.WithdrawMemo(address, amount, problem);
                 default:
@@ -508,17 +512,23 @@ internal sealed class TelegramUpdateHandler
         }
     }
 
-    private async Task<string?> TryBalanceTextAsync(CancellationToken cancellationToken)
+    private async Task<string?> QuoteAsync(string sol, CancellationToken cancellationToken)
+    {
+        var price = await _quotes.TryGetAsync(cancellationToken).ConfigureAwait(false);
+        return Services.SolUsdtQuote.Format(sol, price);
+    }
+
+    private async Task<(string? Sol, string? Usdt)> TryBalanceQuoteAsync(CancellationToken cancellationToken)
     {
         try
         {
             var balance = await _wallet.GetBalanceAsync(cancellationToken).ConfigureAwait(false);
-            return balance.Balance;
+            return (balance.Balance, await QuoteAsync(balance.Balance, cancellationToken).ConfigureAwait(false));
         }
         catch (SolanaRpcException ex)
         {
             _logger.LogWarning("Withdraw balance check failed ({Kind}).", ex.Kind);
-            return null;
+            return (null, null);
         }
     }
 

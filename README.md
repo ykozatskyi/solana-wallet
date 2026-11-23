@@ -260,12 +260,12 @@ Do not queue the same payment again until you know the first signature cannot la
 
 Set `TELEGRAM_BOT_TOKEN` and open a private chat with the bot. Anyone else gets "This bot is private." Group chats are ignored except for a pointer to the private chat.
 
-The menu shows network, address, and balance.
+The menu shows network, address, and balance. Balance lines, payout alerts, and deposit alerts also show the SOL amount in USDT from the Binance SOLUSDT price. If that lookup fails, the message still shows SOL.
 
 | Action | What it does |
 | --- | --- |
 | Address | The wallet address, plus a Solana Explorer link. |
-| Balance | SOL balance and account status. |
+| Balance | SOL balance, the same amount in USDT, and account status. |
 | Transactions | Pages of 10, with counterparties and amounts. |
 | Withdraw | Address, amount, optional memo, then an explicit confirm. Uses the same payout queue and limits as the API. |
 | Payouts | Recent payouts and their statuses. |

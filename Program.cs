@@ -23,6 +23,7 @@ public sealed class Program
             Services.SolanaWalletService.SelfCheck();
             BalanceWatcher.SelfCheck();
             PayoutVerifier.SelfCheck();
+            SolUsdtQuote.SelfCheck();
             Console.WriteLine("Self-check ok.");
             return;
         }
@@ -44,10 +45,12 @@ public sealed class Program
         Services.SolanaWalletService.SelfCheck();
         BalanceWatcher.SelfCheck();
         PayoutVerifier.SelfCheck();
+        SolUsdtQuote.SelfCheck();
         builder.Services.AddSingleton(appOptions);
         builder.Services.AddSingleton(TimeProvider.System);
 
         builder.Logging.AddFilter("System.Net.Http.HttpClient.telegram", LogLevel.None);
+        builder.Logging.AddFilter("System.Net.Http.HttpClient.binance", LogLevel.Warning);
         builder.Logging.AddFilter("System.Net.Http.HttpClient.ITelegramBotClient", LogLevel.None);
         builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
         builder.Logging.AddFilter("Npgsql", LogLevel.Warning);
@@ -58,6 +61,13 @@ public sealed class Program
             client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
             client.DefaultRequestHeaders.UserAgent.ParseAdd("SolanaWalletService/1.0");
         });
+        builder.Services.AddHttpClient(SolUsdtQuote.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(5);
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("SolanaWalletService/1.0");
+        });
+        builder.Services.AddSingleton<SolUsdtQuote>();
         builder.Services.AddSingleton<SolanaRpcClient>();
         builder.Services.AddSingleton<Services.SolanaWalletService>();
         builder.Services.AddSingleton<IWalletSigner>(serviceProvider => SolanaWalletSigner.Create(
